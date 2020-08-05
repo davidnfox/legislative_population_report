@@ -1,0 +1,302 @@
+---
+title: "Vermont Legislative District Populations Estimates"
+description: |
+  Based on US Census figures
+author:
+  - name: David Fox
+    url: mailto:david.n.fox@vermont.gov
+    affiliation: Vermont Center for Geographic Information
+    affiliation_url: https://vcgi.vermont.gov/about-vcgi
+date: "2019-01-15"
+output:
+  distill::distill_article:
+      
+      toc: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+library(tidycensus)
+library(DT)
+library(plotly)
+library(ggthemes)
+library(sf)
+library(mapview)
+library(viridisLite)
+library(ggalt)
+library(leafpop)
+library(tmap)
+library(pals)
+library(reactable)
+
+house_joined <- readRDS("data/house_joined_2018.RDS")
+senate_joined <- readRDS("data/senate_joined_2018.RDS")
+house_gather <- readRDS("data/house_gather_2018.RDS")
+senate_gather <- readRDS("data/senate_gather_2018.RDS")
+```
+
+## Data Sources
+
+Data from 2012 is based on figures provided on the Legislative Redistricting Web page, located [here](http://www.leg.state.vt.us/Reapportionment). Population figures from 2018 are sourced directly from the US Census American Community Survey (ACS). Data from the 2019 ACS will be available in December of 2020. Because the ACS is only a sample, not a full count, these population figures are sampled estimates and include +/- margins of error (MOE) at the 90% confidence interval. As 2018 population figures are only estimates, so too are population change figures. Any given change estimate could be an over or under estimation by the MOE. Three Senate districts and many House districts have population changes within the MOE, so should be considered un-measurable. 
+
+## Senate Districts Data  
+
+Of the 13 Senate Districts, four have show population growth: Chittenden, Franklin, Grand Isle, and Lamoille. Six districts have experienced population decline; Bennington, Caledonia, Rutland, Washington^[The MOE for the Washington Senate district is 0, so this figure can be assumed to be exact], Windam, & Windsor. In three districts; Addison, Essex-Orleans & Orange, population changes are within the 2018 ACS margin of error so population change can not be accurately estimated.
+
+### Senate districts with measurable population growth.
+```{r}
+senate_joined %>% st_drop_geometry() %>% 
+  select(Name, population_2012, estimate_2018, moe, change) %>% 
+  filter(moe < abs(change)) %>% 
+  filter(change > 0) %>% 
+  #datatable(rownames = FALSE)
+  reactable(columns = list(
+    Name = colDef(
+      name = "District",
+      ),
+    population_2012 = colDef(
+      name = "pop 2012",
+      format = colFormat(separators = TRUE)
+    ),
+    estimate_2018 = colDef(
+      name = "pop estimate 2018",
+      format = colFormat(separators = TRUE)
+      ),
+    moe = colDef(
+      name = "MOE",
+      format = colFormat(prefix = "+/- ")),
+    change = colDef(
+      name = "change estimate",
+      format = colFormat(separators = TRUE)
+    )
+    ))
+```
+
+### Senate districts with measurable population decline.
+```{r}
+senate_joined %>% st_drop_geometry() %>% 
+  select(Name, population_2012, estimate_2018, moe, change) %>% 
+  filter(moe < abs(change) | is.na(moe)) %>% 
+  filter(change < 0) %>% 
+  reactable(columns = list(
+    Name = colDef(
+      name = "District",
+      ),
+    population_2012 = colDef(
+      name = "pop 2012",
+      format = colFormat(separators = TRUE)
+    ),
+    estimate_2018 = colDef(
+      name = "pop estimate 2018",
+      format = colFormat(separators = TRUE)
+      ),
+    moe = colDef(
+      name = "MOE",
+      format = colFormat(prefix = "+/- ")),
+    change = colDef(
+      name = "change estimate",
+      format = colFormat(separators = TRUE)
+    )
+    ))
+```
+### Senate Districts with population change within margin of error.
+```{r}
+senate_joined %>% st_drop_geometry() %>% 
+  select(Name, population_2012, estimate_2018, moe, change) %>% 
+  filter(moe > abs(change)) %>% 
+  reactable(columns = list(
+    Name = colDef(
+      name = "District",
+      ),
+    population_2012 = colDef(
+      name = "pop 2012",
+      format = colFormat(separators = TRUE)
+    ),
+    estimate_2018 = colDef(
+      name = "pop estimate 2018",
+      format = colFormat(separators = TRUE)
+      ),
+    moe = colDef(
+      name = "MOE",
+      format = colFormat(prefix = "+/- ")),
+    change = colDef(
+      name = "change estimate",
+      format = colFormat(separators = TRUE)
+    )
+    ))
+```
+### Senate Districts population change chart.  
+```{r, layout="l-page"}
+plot1 <- senate_gather %>% 
+  ggplot(aes(x = population, y = Name, color = year)) +
+  geom_point(shape = 21, size = 5, alpha = .8) +
+  labs(y = NULL) +
+  scale_x_log10(labels = scales::comma) +
+  theme_fivethirtyeight() 
+  
+ggplotly(plot1, tooltip = c("population"))
+```
+
+### Senate District population change map.  
+```{r, fig.height=10, fig.width=5, layout="l-page"}
+
+senate_map <- senate_joined %>% 
+  select(Name, DISTRICT, population_2012, estimate_2018, moe, change)
+  
+
+tmap_mode("view")
+tm_shape(senate_map) +
+  tm_text("DISTRICT",
+          size = .6) +
+  tm_polygons("change", id = "change",
+              alpha = 0.7,
+              palette = "RdYlBu",
+              midpoint = 0,
+              popup.vars = c("Name",
+                             "population_2012",
+                             "estimate_2018",
+                             "change",
+                             "moe"))
+```
+## House Districts  
+Of the House Districts, 20 have shown population growth, 23 have shown population decline, and 66 have population change within the ACS margin of error.  
+
+### House districts with measurable population growth  
+```{r}
+house_joined %>% st_drop_geometry() %>% 
+  select(Name, population_2012, estimate_2018, moe, change) %>% 
+  filter(moe < abs(change)) %>% 
+  filter(change > 0) %>% 
+  reactable(columns = list(
+    Name = colDef(
+      name = "District",
+      ),
+    population_2012 = colDef(
+      name = "pop 2012",
+      format = colFormat(separators = TRUE)
+    ),
+    estimate_2018 = colDef(
+      name = "pop estimate 2018",
+      format = colFormat(separators = TRUE)
+      ),
+    moe = colDef(
+      name = "MOE",
+      format = colFormat(prefix = "+/- ")),
+    change = colDef(
+      name = "change estimate",
+      format = colFormat(separators = TRUE)
+    )
+    ))
+```
+### House districts with measurable population decline.  
+```{r}
+house_joined %>% st_drop_geometry() %>% 
+  select(Name, population_2012, estimate_2018, moe, change) %>% 
+  filter(moe < abs(change)) %>% 
+  filter(change < 0) %>% 
+  reactable(columns = list(
+    Name = colDef(
+      name = "District",
+      ),
+    population_2012 = colDef(
+      name = "pop 2012",
+      format = colFormat(separators = TRUE)
+    ),
+    estimate_2018 = colDef(
+      name = "pop estimate 2018",
+      format = colFormat(separators = TRUE)
+      ),
+    moe = colDef(
+      name = "MOE",
+      format = colFormat(prefix = "+/- ")),
+    change = colDef(
+      name = "change estimate",
+      format = colFormat(separators = TRUE)
+    )
+    ))
+```
+### House Districts with indeterminate population change.  
+```{r}
+house_joined %>% st_drop_geometry() %>% 
+  select(Name, population_2012, estimate_2018, moe, change) %>% 
+  filter(moe > abs(change)) %>% 
+  reactable(columns = list(
+    Name = colDef(
+      name = "District",
+      ),
+    population_2012 = colDef(
+      name = "pop 2012",
+      format = colFormat(separators = TRUE)
+    ),
+    estimate_2018 = colDef(
+      name = "pop estimate 2018",
+      format = colFormat(separators = TRUE)
+      ),
+    moe = colDef(
+      name = "MOE",
+      format = colFormat(prefix = "+/- ")),
+    change = colDef(
+      name = "change estimate",
+      format = colFormat(separators = TRUE)
+    )
+    ))
+```
+
+### House District population changes chart  
+```{r, layout="l-page", fig.with = 5, fig.height=15}
+
+plot2 <- house_gather %>%
+   ggplot(aes(x = population, y = reorder(Name, population), color = year)) +
+   geom_point(shape = 21, size = 2, alpha = .8) +
+   labs(y = NULL) +
+   scale_x_continuous(labels = scales::comma) +
+   theme_fivethirtyeight()
+
+ggplotly(plot2, tooltip = c("population"))
+```
+
+### House Districts population change map.
+```{r fig.height=10, fig.width=5, layout="l-page"}
+
+house_map <- house_joined %>%
+  select(Name, DISTRICT, population_2012, estimate_2018, moe, change)
+
+tmap_mode("view")
+tm_shape(house_map) +
+  tm_text("DISTRICT",
+          size =.5) +
+  tm_polygons("change", id = "change",
+              alpha = 0.5,
+              palette = c("RdYlBu"),
+              popup.vars = c("Name",
+                             "population_2012",
+                             "estimate_2018",
+                             "change",
+                             "moe"))
+```
+  
+### House districts population change map, showing only districts with measurable differences.
+```{r fig.height=10, fig.width=5, layout="l-page"}
+
+house_map2 <- house_joined %>%
+  select(Name, DISTRICT, population_2012, estimate_2018, moe, change) %>% 
+  filter(moe < abs(change))
+
+tmap_mode("view")
+tm_shape(house_map2) +
+  tm_text("DISTRICT",
+          size =.5) +
+  tm_polygons("change",
+              id = "change",
+              alpha = 0.5,
+              palette = c("RdYlBu"),
+              popup.vars = c("Name",
+                             "population_2012",
+                             "estimate_2018",
+                             "change",
+                             "moe"))
+```
